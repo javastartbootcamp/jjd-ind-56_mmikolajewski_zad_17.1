@@ -2,8 +2,10 @@ package pl.javastart.streamsexercise;
 
 import java.math.BigDecimal;
 import java.time.YearMonth;
+import java.time.ZonedDateTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -59,7 +61,7 @@ class PaymentService {
      */
     List<Payment> findPaymentsForGivenMonth(YearMonth yearMonth) {
         return paymentRepository.findAll().stream()
-                .filter(p -> p.getPaymentDate().getMonth() == yearMonth.getMonth())
+                .filter(p -> p.getPaymentDate().getMonth().equals(yearMonth.getMonth()))
                 .collect(Collectors.toList());
     }
 
@@ -68,7 +70,7 @@ class PaymentService {
      */
     List<Payment> findPaymentsForCurrentMonth() {
         return paymentRepository.findAll().stream()
-                .filter(p -> p.getPaymentDate().getMonth() == dateTimeProvider.zonedDateTimeNow().getMonth())
+                .filter(p -> p.getPaymentDate().getMonth() == ZonedDateTime.now().getMonth())
                 .collect(Collectors.toList());
     }
 
@@ -97,9 +99,9 @@ class PaymentService {
      */
     Set<String> findProductsSoldInCurrentMonth() {
         return paymentRepository.findAll().stream()
-                .filter(payment -> payment.getPaymentDate().getMonth() == dateTimeProvider.zonedDateTimeNow().getMonth())
+                .filter(payment -> payment.getPaymentDate().getMonth().equals(ZonedDateTime.now().getMonth()))
                 .flatMap(payment -> payment.getPaymentItems().stream())
-                .map(paymentItem -> paymentItem.getName())
+                .map(PaymentItem::getName)
                 .collect(Collectors.toSet());
 
     }
@@ -111,8 +113,8 @@ class PaymentService {
         return paymentRepository.findAll().stream()
                 .filter(payment -> payment.getPaymentDate().getMonth() == yearMonth.getMonth())
                 .flatMap(payment -> payment.getPaymentItems().stream())
-                .map(paymentItem -> paymentItem.getFinalPrice())
-                .reduce(BigDecimal.ZERO, (bigDecimal, bigDecimal2) -> bigDecimal.add(bigDecimal2));
+                .map(PaymentItem::getFinalPrice)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /*
@@ -122,8 +124,8 @@ class PaymentService {
         return paymentRepository.findAll().stream()
                 .filter(payment -> payment.getPaymentDate().getMonth() == yearMonth.getMonth())
                 .flatMap(payment -> payment.getPaymentItems().stream())
-                .map(paymentItem -> paymentItem.getDiscount())
-                .reduce(BigDecimal.ZERO, (bigDecimal, bigDecimal2) -> bigDecimal.add(bigDecimal2));
+                .map(PaymentItem::getDiscount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /*
@@ -141,9 +143,20 @@ class PaymentService {
     Znajdź i zwróć płatności, których wartość przekracza wskazaną granicę
      */
     Set<Payment> findPaymentsWithValueOver(int value) {
-        return paymentRepository.findAll().stream()
-                .filter(payment -> payment.getPaymentItems().forEac)
+        return paymentRepository.findAll()
+                .stream()
+                .filter(payment -> {
+                    Optional<BigDecimal> suma = payment.getPaymentItems().stream()
+                            .map(PaymentItem::getRegularPrice)
+                            .reduce((bigDecimal, bigDecimal2) -> bigDecimal.add(bigDecimal2));
 
+                    if (suma.isPresent()) {
+                        return suma.get().intValue() > value;
+                    } else {
+                        return false;
+                    }
+                })
+                .collect(Collectors.toSet());
     }
 
 }
