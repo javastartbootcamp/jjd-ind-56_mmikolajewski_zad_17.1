@@ -61,7 +61,8 @@ class PaymentService {
      */
     List<Payment> findPaymentsForGivenMonth(YearMonth yearMonth) {
         return paymentRepository.findAll().stream()
-                .filter(p -> p.getPaymentDate().getMonth().equals(yearMonth.getMonth()))
+                .filter(payment ->
+                        YearMonth.from(payment.getPaymentDate()).equals(yearMonth))
                 .collect(Collectors.toList());
     }
 
@@ -69,18 +70,17 @@ class PaymentService {
     Znajdź i zwróć płatności dla aktualnego miesiąca
      */
     List<Payment> findPaymentsForCurrentMonth() {
-        return paymentRepository.findAll().stream()
-                .filter(p -> p.getPaymentDate().getMonth() == ZonedDateTime.now().getMonth())
-                .collect(Collectors.toList());
+        return findPaymentsForGivenMonth(YearMonth.from(dateTimeProvider.zonedDateTimeNow()));
     }
 
     /*
     Znajdź i zwróć płatności dla ostatnich X dni
      */
     List<Payment> findPaymentsForGivenLastDays(int days) {
-        int size = findPaymentsSortedByDateDesc().size();
-        return findPaymentsSortedByDateAsc().stream()
-                .skip(Math.max(0, size - days))
+        ZonedDateTime currentDate = dateTimeProvider.zonedDateTimeNow();
+        ZonedDateTime currentDateMinusXdays = currentDate.minusDays(days);
+        return paymentRepository.findAll().stream()
+                .filter(payment -> payment.getPaymentDate().isAfter(currentDateMinusXdays))
                 .collect(Collectors.toList());
     }
 
@@ -99,7 +99,8 @@ class PaymentService {
      */
     Set<String> findProductsSoldInCurrentMonth() {
         return paymentRepository.findAll().stream()
-                .filter(payment -> payment.getPaymentDate().getMonth().equals(ZonedDateTime.now().getMonth()))
+                .filter(payment ->
+                        YearMonth.from(payment.getPaymentDate()).equals(dateTimeProvider.yearMonthNow()))
                 .flatMap(payment -> payment.getPaymentItems().stream())
                 .map(PaymentItem::getName)
                 .collect(Collectors.toSet());
@@ -111,7 +112,8 @@ class PaymentService {
      */
     BigDecimal sumTotalForGivenMonth(YearMonth yearMonth) {
         return paymentRepository.findAll().stream()
-                .filter(payment -> payment.getPaymentDate().getMonth() == yearMonth.getMonth())
+                .filter(payment ->
+                        YearMonth.from(payment.getPaymentDate()).equals(yearMonth))
                 .flatMap(payment -> payment.getPaymentItems().stream())
                 .map(PaymentItem::getFinalPrice)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -145,18 +147,19 @@ class PaymentService {
     Set<Payment> findPaymentsWithValueOver(int value) {
         return paymentRepository.findAll()
                 .stream()
-                .filter(payment -> {
-                    Optional<BigDecimal> suma = payment.getPaymentItems().stream()
-                            .map(PaymentItem::getRegularPrice)
-                            .reduce((bigDecimal, bigDecimal2) -> bigDecimal.add(bigDecimal2));
-
-                    if (suma.isPresent()) {
-                        return suma.get().intValue() > value;
-                    } else {
-                        return false;
-                    }
-                })
+                .filter(payment -> calculatePaymentValue(payment) > value)
                 .collect(Collectors.toSet());
     }
 
+    private static int calculatePaymentValue(Payment payment) {
+        Optional<BigDecimal> suma = payment.getPaymentItems().stream()
+                .map(PaymentItem::getRegularPrice)
+                .reduce(BigDecimal::add);
+
+        if (suma.isPresent()) {
+            return suma.get().intValueExact();
+        } else {
+            return BigDecimal.ZERO.intValueExact();
+        }
+    }
 }
